@@ -1,2 +1,9 @@
 build
-!.vscode/*
+# Ignore the entire .vscode directory by default
+.vscode/
+
+# But re-include these specific shared settings
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
