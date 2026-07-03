@@ -1,0 +1,17 @@
+Normal 		[f]		[g]		[f] hold
+0		roll down	roll up		sleep
+1		10^x		LOG
+2		e^x		LN
+3		x^2		√x
+4		Degrees2Radian	Polar2Rectangular
+5		Integer		Fraction
+6		STO		RCL
+7		SIN		ASIN
+8		COS		ACOS
+9		TAN		ATAN
++		LSTx		VIEW		Brightness up
+-		+/-		FIX		Brightness down
+*		y^x		Change %
+/		1/x		%
+.		Pi		x!
+E		x<>y		CLx		Clear Stack(not implemented)
