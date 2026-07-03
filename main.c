@@ -39,7 +39,7 @@ int main(void)
 
         KeyPress kp = scan_keypad();
 
-        if (kp.code != '\0')
+        if (kp.id != KEY_NONE)
         {
             // If the unit was asleep, wake up the silicon and consume the keypress gracefully
             if (is_sleeping)
@@ -49,25 +49,27 @@ int main(void)
                 refresh_hardware_display();                // Bring back the numbers
 
                 is_sleeping = false;
-                nvram_reset_timer(); // Reset our 30s window
+                nvram_reset_timer(); // Reset our window
 
                 // Wait for the user to lift their finger so it doesn't leak into calculations
                 sleep_ms(200);
                 continue;
             }
             nvram_reset_timer();
-            // --- NEW: CHCK FOR [f] HOLD DOWN + '0' TO SHUT DOWN ---
-            if (gpio_get(PIN_SHIFT_F) == 0 && kp.code == '0')
+
+            // --- UPDATED: [f] HOLD DOWN + KEY_0 SHUTDOWN ---
+            if (gpio_get(PIN_SHIFT_F) == 0 && kp.id == KEY_0)
             {
                 nvram_force_sleep();
                 active_shift = SHIFT_NONE; // Reset shift state cleanly
                 update_shift_led(active_shift);
-                continue; // Prevent it from typing '0' or running other routines
+                continue;
             }
+
             // Live Momentary Brightness Override Engine
-            if (gpio_get(PIN_SHIFT_F) == 0 && (kp.code == '+' || kp.code == '-'))
+            if (gpio_get(PIN_SHIFT_F) == 0 && (kp.id == KEY_PLUS || kp.id == KEY_MINUS))
             {
-                if (kp.code == '+')
+                if (kp.id == KEY_PLUS)
                 {
                     if (current_intensity < 15)
                     {
@@ -95,7 +97,7 @@ int main(void)
 
             if (math_error)
             {
-                if (current_execution_shift == SHIFT_G && kp.code == 'E')
+                if (current_execution_shift == SHIFT_G && kp.id == KEY_ENTER)
                 {
                     math_error = false;
                     input.length = 0;
@@ -118,40 +120,40 @@ int main(void)
                     input.has_decimal = false;
                 }
 
-                if (kp.code == 'E')
+                if (kp.id == KEY_ENTER)
                 {
                     double temp = stack.x;
                     stack.x = stack.y;
                     stack.y = temp;
                 }
-                else if (kp.code == '.')
+                else if (kp.id == KEY_DOT)
                 {
                     if (!input.disable_lift)
                         stack_push(stack.x);
                     stack.x = 3.141592653589793;
                     input.disable_lift = false;
                 }
-                else if (kp.code == '0')
+                else if (kp.id == KEY_0)
                 {
                     rpn_roll_down();
-                    lift_enabled = false; // HP convention: rolling the stack manually manages the lift state
+                    lift_enabled = false;
                 }
-                else if (kp.code == '1')
+                else if (kp.id == KEY_1)
                 {
                     stack.x = pow(10.0, stack.x);
                     lift_enabled = true;
                 }
-                else if (kp.code == '2')
+                else if (kp.id == KEY_2)
                 {
                     stack.x = exp(stack.x);
                     lift_enabled = true;
                 }
-                else if (kp.code == '3')
+                else if (kp.id == KEY_3)
                 {
                     stack.x = stack.x * stack.x;
                     lift_enabled = true;
                 }
-                else if (kp.code == '4')
+                else if (kp.id == KEY_4)
                 {
                     mode_degrees = !mode_degrees;
                     uint8_t flash_y[8];
@@ -170,12 +172,12 @@ int main(void)
                     sleep_ms(500);
                     lift_enabled = false;
                 }
-                else if (kp.code == '5')
+                else if (kp.id == KEY_5)
                 {
                     rpn_integer_part();
                     lift_enabled = true;
                 }
-                else if (kp.code == '6')
+                else if (kp.id == KEY_6)
                 { // --- STO ---
                     int idx = capture_two_digits();
                     if (idx >= 0 && idx <= 24)
@@ -186,7 +188,7 @@ int main(void)
                     refresh_hardware_display();
                     continue;
                 }
-                else if (kp.code == '7')
+                else if (kp.id == KEY_7)
                 {
                     double angle = stack.x;
                     if (mode_degrees)
@@ -194,7 +196,7 @@ int main(void)
                     stack.x = sin(angle);
                     lift_enabled = true;
                 }
-                else if (kp.code == '8')
+                else if (kp.id == KEY_8)
                 {
                     double angle = stack.x;
                     if (mode_degrees)
@@ -202,7 +204,7 @@ int main(void)
                     stack.x = cos(angle);
                     lift_enabled = true;
                 }
-                else if (kp.code == '9')
+                else if (kp.id == KEY_9)
                 {
                     double angle = stack.x;
                     if (mode_degrees)
@@ -210,19 +212,19 @@ int main(void)
                     stack.x = tan(angle);
                     lift_enabled = true;
                 }
-                else if (kp.code == '+')
+                else if (kp.id == KEY_PLUS)
                 {
                     rpn_last_x();
                 }
-                else if (kp.code == '-')
+                else if (kp.id == KEY_MINUS)
                 {
                     rpn_change_sign();
                 }
-                else if (kp.code == '/')
+                else if (kp.id == KEY_DIV)
                 {
                     rpn_reciprocal();
                 }
-                else if (kp.code == '*')
+                else if (kp.id == KEY_MULT)
                 {
                     rpn_power();
                 }
@@ -237,7 +239,7 @@ int main(void)
                     input.has_decimal = false;
                 }
 
-                if (kp.code == 'E')
+                if (kp.id == KEY_ENTER)
                 {
                     if (gpio_get(PIN_SHIFT_G) == 0)
                     {
@@ -260,16 +262,16 @@ int main(void)
                         input.disable_lift = true;
                     }
                 }
-                else if (kp.code == '.')
+                else if (kp.id == KEY_DOT)
                 {
                     rpn_factorial();
                 }
-                else if (kp.code == '0')
+                else if (kp.id == KEY_0)
                 {
                     rpn_roll_up();
                     lift_enabled = false;
                 }
-                else if (kp.code == '1')
+                else if (kp.id == KEY_1)
                 {
                     if (stack.x > 0.0)
                         stack.x = log10(stack.x);
@@ -277,7 +279,7 @@ int main(void)
                         math_error = true;
                     lift_enabled = true;
                 }
-                else if (kp.code == '2')
+                else if (kp.id == KEY_2)
                 {
                     if (stack.x > 0.0)
                         stack.x = log(stack.x);
@@ -285,7 +287,7 @@ int main(void)
                         math_error = true;
                     lift_enabled = true;
                 }
-                else if (kp.code == '3')
+                else if (kp.id == KEY_3)
                 {
                     if (stack.x >= 0.0)
                         stack.x = sqrt(stack.x);
@@ -293,12 +295,10 @@ int main(void)
                         math_error = true;
                     lift_enabled = true;
                 }
-                else if (kp.code == '4')
+                else if (kp.id == KEY_4)
                 {
                     rpn_toggle_coordinates();
 
-                    // Brief visual status flash to let the user know which mode was selected:
-                    // Flash "P" on the left of digit array if Polar, or "C" (Cartesian) if Rectangular
                     uint8_t flash_y[8];
                     uint8_t flash_x[8];
                     for (int i = 0; i < 8; i++)
@@ -307,22 +307,21 @@ int main(void)
                         flash_x[i] = CODE_B_BLANK;
                     }
 
-                    // CODE_B_P represents 'P'. For 'C', we can approximate it or use an empty indicator
                     flash_x[7] = mode_polar ? CODE_B_P : CODE_B_BLANK;
 
                     for (int digit = 0; digit < 8; digit++)
                     {
                         write_register_dual(CMD_DIGIT0 + digit, flash_y[digit], flash_x[digit]);
                     }
-                    sleep_ms(300); // Quick status acknowledgment window
+                    sleep_ms(300);
                     lift_enabled = false;
                 }
-                else if (kp.code == '5')
+                else if (kp.id == KEY_5)
                 {
                     rpn_fractional_part();
                     lift_enabled = true;
                 }
-                else if (kp.code == '6')
+                else if (kp.id == KEY_6)
                 { // --- RCL ---
                     int idx = capture_two_digits();
                     if (idx >= 0 && idx <= 24)
@@ -333,32 +332,32 @@ int main(void)
                     refresh_hardware_display();
                     continue;
                 }
-                else if (kp.code == '7')
+                else if (kp.id == KEY_7)
                 {
                     stack.x = asin(stack.x);
                     if (mode_degrees)
                         stack.x *= RAD_TO_DEG;
                     lift_enabled = true;
                 }
-                else if (kp.code == '8')
+                else if (kp.id == KEY_8)
                 {
                     stack.x = acos(stack.x);
                     if (mode_degrees)
                         stack.x *= RAD_TO_DEG;
                     lift_enabled = true;
                 }
-                else if (kp.code == '9')
+                else if (kp.id == KEY_9)
                 {
                     stack.x = atan(stack.x);
                     if (mode_degrees)
                         stack.x *= RAD_TO_DEG;
                     lift_enabled = true;
                 }
-                else if (kp.code == '+')
+                else if (kp.id == KEY_PLUS)
                 {
                     rpn_view_stack();
                 }
-                else if (kp.code == '-')
+                else if (kp.id == KEY_MINUS)
                 {
                     uint8_t flash_y[8] = {CODE_B_BLANK, CODE_B_BLANK, CODE_B_BLANK, CODE_B_BLANK,
                                           CODE_B_BLANK, CODE_B_BLANK, CODE_B_BLANK, CODE_B_BLANK};
@@ -370,24 +369,24 @@ int main(void)
                         write_register_dual(CMD_DIGIT0 + d, flash_y[d], flash_x[d]);
                     }
 
-                    KeyPress num_kp = {'\0', SHIFT_NONE};
-                    while (num_kp.code == '\0')
+                    KeyPress num_kp = {KEY_NONE, '\0', SHIFT_NONE};
+                    while (num_kp.id == KEY_NONE)
                     {
                         num_kp = scan_keypad();
                         sleep_ms(10);
                     }
 
-                    if (num_kp.code >= '0' && num_kp.code <= '9')
+                    if (num_kp.id >= KEY_0 && num_kp.id <= KEY_9)
                     {
-                        fix_digits = num_kp.code - '0';
+                        fix_digits = num_kp.symbol - '0';
                     }
                     lift_enabled = false;
                 }
-                else if (kp.code == '/')
+                else if (kp.id == KEY_DIV)
                 {
                     rpn_percentage();
                 }
-                else if (kp.code == '*')
+                else if (kp.id == KEY_MULT)
                 {
                     rpn_percent_difference();
                 }
@@ -395,17 +394,17 @@ int main(void)
             // --- STANDARD UN-SHIFTED KEYS ---
             else
             {
-                if ((kp.code >= '0' && kp.code <= '9') || kp.code == '.')
+                if ((kp.id >= KEY_0 && kp.id <= KEY_9) || kp.id == KEY_DOT)
                 {
-                    input_add_char(kp.code);
+                    input_add_char(kp.symbol); // Reused the clean ASCII character asset
                 }
-                else if (kp.code == 'E')
+                else if (kp.id == KEY_ENTER)
                 {
                     rpn_enter();
                 }
-                else if (kp.code == '+' || kp.code == '-' || kp.code == '*' || kp.code == '/')
+                else if (kp.id == KEY_PLUS || kp.id == KEY_MINUS || kp.id == KEY_MULT || kp.id == KEY_DIV)
                 {
-                    rpn_execute_operator(kp.code);
+                    rpn_execute_operator(kp.symbol);
                 }
             }
 

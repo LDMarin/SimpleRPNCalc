@@ -572,6 +572,7 @@ void rpn_recall_register(int reg_idx)
     }
 }
 
+// --- FIXED: Upgraded with abstract enum & symbol properties ---
 int capture_two_digits(void)
 {
     uint8_t flash_y[8];
@@ -590,33 +591,33 @@ int capture_two_digits(void)
         write_register_dual(CMD_DIGIT0 + d, flash_y[d], flash_x[d]);
     }
 
-    // Capture first digit
-    KeyPress d1 = {'\0', SHIFT_NONE};
-    while (d1.code < '0' || d1.code > '9')
+    // Capture first digit safely using KeyId abstract mappings
+    KeyPress d1 = {KEY_NONE, '\0', SHIFT_NONE};
+    while (d1.id < KEY_0 || d1.id > KEY_9)
     {
         d1 = scan_keypad();
         sleep_ms(10);
     }
-    flash_x[1] = d1.code - '0';
+    flash_x[1] = d1.symbol - '0';
     for (int d = 0; d < 8; d++)
     {
         write_register_dual(CMD_DIGIT0 + d, flash_y[d], flash_x[d]);
     }
     sleep_ms(150);
 
-    // Capture second digit
-    KeyPress d2 = {'\0', SHIFT_NONE};
-    while (d2.code < '0' || d2.code > '9')
+    // Capture second digit safely using KeyId abstract mappings
+    KeyPress d2 = {KEY_NONE, '\0', SHIFT_NONE};
+    while (d2.id < KEY_0 || d2.id > KEY_9)
     {
         d2 = scan_keypad();
         sleep_ms(10);
     }
-    flash_x[0] = d2.code - '0';
+    flash_x[0] = d2.symbol - '0';
     for (int d = 0; d < 8; d++)
     {
         write_register_dual(CMD_DIGIT0 + d, flash_y[d], flash_x[d]);
     }
     sleep_ms(150);
 
-    return (d1.code - '0') * 10 + (d2.code - '0');
+    return (d1.symbol - '0') * 10 + (d2.symbol - '0');
 }

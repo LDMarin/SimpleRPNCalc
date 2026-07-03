@@ -11,7 +11,7 @@
 #define EEPROM_ADDR 0x50
 #define STATE_SIZE sizeof(CalculatorState)
 #define PAGE_SIZE 16
-#define I2C_TIMEOUT_US 25000 // 25ms safety timeout line protective guard
+#define I2C_TIMEOUT_US 25000
 
 static uint32_t last_activity_time = 0;
 static bool save_pending = false;
@@ -19,34 +19,52 @@ extern uint8_t current_intensity;
 
 bool is_sleeping = false;
 
+// OPTIMIZATION: Keep a lightweight RAM cache of the last written physical EEPROM state
+static CalculatorState last_saved_cache;
+
 void nvram_reset_timer(void)
 {
     last_activity_time = to_ms_since_boot(get_absolute_time());
     save_pending = true;
 }
 
-// Internal helper to perform the actual EEPROM write sequence
-static void execute_eeprom_write(void)
+// Internal helper to pack variables into a target structure
+static void pack_current_state(CalculatorState *dest)
 {
-    CalculatorState current_state;
-    current_state.magic = NVRAM_MAGIC;
-    current_state.x = stack.x;
-    current_state.y = stack.y;
-    current_state.z = stack.z;
-    current_state.t = stack.t;
+    dest->magic = NVRAM_MAGIC;
+    dest->x = stack.x;
+    dest->y = stack.y;
+    dest->z = stack.z;
+    dest->t = stack.t;
 
     for (int i = 0; i < 25; i++)
     {
-        current_state.registers[i] = registers[i];
+        dest->registers[i] = registers[i];
     }
-    current_state.brightness = current_intensity;
-    current_state.fix_digits = fix_digits;
+    dest->brightness = current_intensity;
+    dest->fix_digits = fix_digits;
+
+    // Explicitly zero the reserved padding to keep memcmp predictable
+    dest->reserved[0] = 0;
+    dest->reserved[1] = 0;
+    dest->reserved[2] = 0;
+}
+
+static void execute_eeprom_write(void)
+{
+    CalculatorState current_state;
+    pack_current_state(&current_state);
+
+    // OPTIMIZATION: If current state matches our last write exactly, skip the I2C bus write entirely!
+    if (memcmp(&current_state, &last_saved_cache, STATE_SIZE) == 0)
+    {
+        return;
+    }
 
     uint8_t write_buf[STATE_SIZE];
     memcpy(write_buf, &current_state, STATE_SIZE);
 
     uint16_t bytes_written = 0;
-
     while (bytes_written < STATE_SIZE)
     {
         uint8_t chunk_size = PAGE_SIZE;
@@ -59,27 +77,24 @@ static void execute_eeprom_write(void)
         tx_frame[0] = (uint8_t)(bytes_written & 0xFF);
         memcpy(&tx_frame[1], &write_buf[bytes_written], chunk_size);
 
-        // Safe write sequence with a hard microsecond timeout threshold
         i2c_write_timeout_us(I2C_PORT, EEPROM_ADDR, tx_frame, chunk_size + 1, false, I2C_TIMEOUT_US);
-
-        // Essential physical delay allowing the 24LC16B internal write machine to reset
         sleep_ms(5);
 
         bytes_written += chunk_size;
     }
+
+    // OPTIMIZATION: Store the state into cache now that it's successfully on the wire
+    memcpy(&last_saved_cache, &current_state, STATE_SIZE);
 }
 
 void nvram_force_sleep(void)
 {
-    // Silicon Shutdown: blank display drivers before handling memory transmission
     write_register_all(CMD_SHUTDOWN, 0);
     sleep_ms(5);
 
-    // Clear trackers first to protect state
     save_pending = false;
     is_sleeping = true;
 
-    // Commit current state safely to EEPROM
     execute_eeprom_write();
 }
 
@@ -96,7 +111,6 @@ void nvram_init(void)
     CalculatorState loaded_state;
     uint8_t start_addr = 0x00;
 
-    // Protected read command sequence
     i2c_write_timeout_us(I2C_PORT, EEPROM_ADDR, &start_addr, 1, true, I2C_TIMEOUT_US);
     int bytes_read = i2c_read_timeout_us(I2C_PORT, EEPROM_ADDR, (uint8_t *)&loaded_state, STATE_SIZE, false, I2C_TIMEOUT_US);
 
@@ -113,8 +127,15 @@ void nvram_init(void)
         }
         current_intensity = loaded_state.brightness;
         max7219_set_brightness(current_intensity);
-
         fix_digits = loaded_state.fix_digits;
+
+        // OPTIMIZATION: Seed our cache on startup so we know exactly what is in the hardware chip
+        memcpy(&last_saved_cache, &loaded_state, STATE_SIZE);
+    }
+    else
+    {
+        // If blank/corrupted EEPROM, zero the tracking cache out safely
+        memset(&last_saved_cache, 0, STATE_SIZE);
     }
 
     last_activity_time = to_ms_since_boot(get_absolute_time());
@@ -130,14 +151,12 @@ void nvram_check_timeout(void)
     uint32_t current_time = to_ms_since_boot(get_absolute_time());
     uint32_t elapsed_time = current_time - last_activity_time;
 
-    // Background Auto-Save sequence
     if (save_pending && elapsed_time >= 5000)
     {
-        save_pending = false; // Reset BEFORE calling write to break any execution overlap
+        save_pending = false;
         execute_eeprom_write();
     }
 
-    // Automated deep sleep timeout sequence: Blank display after 60 seconds
     if (elapsed_time >= 60000)
     {
         nvram_force_sleep();
